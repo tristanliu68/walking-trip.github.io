@@ -1,0 +1,106 @@
+const config = window.KUMANO_CONFIG || {}
+const clientKey = config.supabasePublishableKey || config.supabaseAnonKey
+const isLive = Boolean(config.supabaseUrl && clientKey)
+let supabase = null
+const DEMO_KEY = 'kumano-collab-web-demo-v1'
+const ACTIVE_KEY = 'kumano-collab-active-trip'
+const NAME_KEY = 'kumano-collab-name'
+const app = document.querySelector('#app')
+const modalRoot = document.querySelector('#modal-root')
+const toast = document.querySelector('#toast')
+
+const seedDays = [
+  { tag:'中边路 · 启程', title:'泷尻王子 → 近露王子', shortTitle:'泷尻 → 近露', route:'大阪 → 和歌山 → 泷尻王子 → 近露王子', subtitle:'从大阪或关西机场进入纪伊半岛，踏上熊野古道的第一段山路。', metrics:{walk:'14–16 km',time:'6–7 小时',gain:'+1230 / −820 m'}, note:'首日为全程爬升最高的一天；午餐为徒步途中补给的精品便当。', stops:[['transport','🚌','大阪／关西机场附近酒店','专车接机，车程约 3 小时，直达徒步起点。'],['walk','⛩','泷尻王子','徒步起点；沿古道前行约 4 km（约 1.5 小时）。'],['walk','🍱','高原','午餐点，享用精品便当；随后继续徒步约 9 km（约 4 小时）。'],['walk','⛩','近露王子','徒步终点；沿途可欣赏田园风光与传统日式村落。'],['hotel','♨','海边酒店／熊野古道观光会指定民宿','入住并自行安排晚餐，完成第一天恢复。']] },
+  { tag:'中边路 · 森林', title:'继樱王子 → 发心门王子', shortTitle:'继樱 → 发心门', route:'酒店 → 继樱王子 → 发心门王子 → 酒店', subtitle:'穿行原始森林与古道分界地带，抵达通往本宫大社的关键入口。', metrics:{walk:'13 km',time:'6–7 小时',gain:'+780 / −980 m'}, note:'当天终点为发心门王子；住宿安排为川汤温泉富士屋。', stops:[['transport','🚌','酒店出发','早餐后乘车约 1.5 小时，抵达继樱王子。'],['walk','⛩','继樱王子','徒步起点，开始 13 km 的森林古道。'],['walk','🌲','山林古道','沉浸式徒步路段，适时补给精品便当。'],['walk','⛩','发心门王子','徒步终点；熊野古道传统分界点，被视为通往熊野本宫大社的入口。'],['hotel','♨','川汤温泉富士屋','返回酒店，温泉住宿；早餐与晚餐自理。']] },
+  { tag:'熊野三山 · 本宫', title:'发心门王子 → 本宫大社', shortTitle:'发心门 → 本宫', route:'酒店 → 发心门王子 → 熊野本宫大社 → 温泉酒店', subtitle:'以舒缓里程抵达熊野本宫大社，并在汤之峰与川汤享受最具代表性的温泉体验。', metrics:{walk:'7 km',time:'3–4 小时',gain:'+190 / −460 m'}, note:'当日步行距离较短，适合作为前两日长距离徒步后的恢复日。', stops:[['transport','🚌','酒店出发','乘车约 1.5 小时，前往发心门王子。'],['walk','⛩','发心门王子','徒步起点；步行约 7 km（3–4 小时）。'],['walk','⛩','熊野本宫大社','徒步终点，熊野三山之一。'],['walk','♨','汤之峰温泉','可体验煮温泉蛋。'],['walk','♨','川汤温泉','可在河边自行挖掘温泉池。'],['hotel','🍽','浦岛酒店／海边海景温泉酒店','入住温泉酒店，享用酒店会席料理。']] },
+  { tag:'大边路 · 挑战', title:'小口 → 青岸渡寺 → 那智瀑布', shortTitle:'小口 → 那智', route:'酒店 → 小口 → 青岸渡寺 → 那智瀑布 → 温泉酒店', subtitle:'全程最长、爬升最大的挑战日；从传统山村翻越山岭，走向那智瀑布。', metrics:{walk:'15.5 km',time:'7–8 小时',gain:'+1260 / −930 m'}, note:'建议最早出发，并准备登山杖、雨具和充足的个人补给。', stops:[['transport','🚌','酒店出发','乘车约 1–1.5 小时，前往小口。'],['walk','🏠','小口','徒步起点，熊野古道中的传统山村。'],['walk','🥾','越岭徒步','全程 15.5 km，预计 7–8 小时；为本行程挑战核心。'],['walk','🛕','青岸渡寺','徒步终点，著名古寺，也是观赏那智瀑布的最佳地点之一。'],['walk','💧','那智瀑布','感受熊野最具代表性的壮丽名景。'],['hotel','♨','浦岛酒店／海边海景温泉酒店','返回温泉酒店，享用会席料理并恢复体力。']] },
+  { tag:'熊野三山 · 收官', title:'熊野三山巡礼 · 返回大阪', shortTitle:'三山巡礼 · 收官', route:'酒店 → 那智大社 → 高野坂 → 速玉大社 → 本宫大社 → 大阪', subtitle:'巡礼熊野三山的最后两座神社，领取完全踏破证明书后返回大阪。', metrics:{walk:'2.5 km',time:'0.5–1 小时',gain:'+200 m'}, note:'整体返程车程约 4 小时；金枪鱼拍卖受鱼市休市日或捕获量影响。', stops:[['transport','🚌','酒店出发 · 胜浦鱼港','参观金枪鱼拍卖（受鱼市休市日或捕获量影响）。'],['walk','⛩','神仓神社 · 大门坂 · 熊野那智大社','巡礼熊野名胜，完成那智区域参拜。'],['walk','🌊','高野坂','午餐后前往；熊野古道唯一一段沿海徒步路线。'],['walk','⛩','熊野速玉大社','参观熊野三山之一。'],['walk','🥾','小口短途徒步','徒步 2.5 km，约 0.5–1 小时。'],['walk','⛩','熊野本宫大社','领取“完全踏破证明书”。'],['transport','🚌','返回大阪／关西机场','行程结束，专车送回大阪市内酒店或关西机场，车程约 4 小时。']] }
+].map((day, index) => ({...day, stops:day.stops.map(([type,icon,title,detail])=>({type,icon,title,detail})), dayNo:index + 1}))
+
+const state = { trip:null, days:[], members:[], activity:[], role:'viewer', userId:'', selectedDay:1, channel:null, demo:null }
+const esc = (value='') => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]))
+const fmt = (date) => { if(!date) return '刚刚'; const d=new Date(date); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
+const shortName = (name='同行者') => name.slice(-1)
+const roleText = role => ({owner:'组织者',editor:'可编辑',viewer:'仅查看'}[role] || '仅查看')
+const userName = () => localStorage.getItem(NAME_KEY) || '同行者'
+const setUserName = () => { const name=window.prompt('给同行者显示的昵称（不超过 20 个字）',userName()); if(name && name.trim()) { localStorage.setItem(NAME_KEY,name.trim().slice(0,20)); toastMsg('昵称将用于今后的邀请与新行程') } }
+function toastMsg(message){ toast.textContent=message; toast.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>toast.classList.remove('show'),2600) }
+function fail(message){ throw new Error(message) }
+
+function demoData(){
+  const saved=localStorage.getItem(DEMO_KEY)
+  if(saved) return JSON.parse(saved)
+  const now=new Date().toISOString(); const tripId='demo-kumano-5day'
+  const result={trip:{id:tripId,name:'熊野古道全踏破',summary:'五日中边路与大边路徒步计划；从泷尻王子出发，完成熊野三山巡礼。',owner_id:'demo-me',created_at:now},days:seedDays.map((content,index)=>({id:`demo-day-${index+1}`,trip_id:tripId,day_no:index+1,content,revision:1,updated_at:now})),members:[{id:'demo-member-me',trip_id:tripId,user_id:'demo-me',role:'owner',display_name:userName(),joined_at:now}],activity:[{id:'demo-activity-1',trip_id:tripId,text:'创建了熊野古道五日同行计划',created_at:now}]}
+  localStorage.setItem(DEMO_KEY,JSON.stringify(result)); return result
+}
+function persistDemo(){ localStorage.setItem(DEMO_KEY,JSON.stringify(state.demo)) }
+function normalize(data){
+  state.trip=data.trip
+  state.days=data.days.map(row=>({...row.content,_id:row.id,revision:row.revision,updatedAt:row.updated_at,dayNo:row.day_no || row.content.dayNo})).sort((a,b)=>a.dayNo-b.dayNo)
+  state.members=data.members.sort((a,b)=>a.joined_at.localeCompare(b.joined_at))
+  state.activity=data.activity.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
+  const mine=state.members.find(member=>member.user_id===state.userId)
+  state.role=mine?.role || 'viewer'
+  if(!state.days.some(day=>day.dayNo===state.selectedDay)) state.selectedDay=state.days[0]?.dayNo || 1
+}
+async function start(){
+  try{
+    if(isLive){
+      const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm')
+      supabase = createClient(config.supabaseUrl, clientKey)
+      const {data:{session},error:sessionError}=await supabase.auth.getSession(); if(sessionError) throw sessionError
+      if(!session){ const {data,error}=await supabase.auth.signInAnonymously(); if(error) throw error; state.userId=data.user.id } else state.userId=session.user.id
+      await openLiveTrip()
+    }else{ state.userId='demo-me'; state.demo=demoData(); normalize(state.demo) }
+    render(); if(isLive) subscribe()
+  }catch(error){ app.innerHTML=`<div class="loading-screen"><b>无法打开协作行程</b><span>${esc(error.message || '请检查配置后重试')}</span></div>` }
+}
+async function openLiveTrip(){
+  const params=new URLSearchParams(location.search); const invitedTrip=params.get('trip'); const invite=params.get('invite')
+  let tripId=invitedTrip || localStorage.getItem(ACTIVE_KEY)
+  if(invitedTrip && invite){ const {data,error}=await supabase.rpc('join_trip_with_invite',{p_trip_id:invitedTrip,p_code:invite,p_display_name:userName()}); if(error) throw error; tripId=data; localStorage.setItem(ACTIVE_KEY,tripId); history.replaceState({},'',location.pathname) }
+  if(!tripId){ const {data,error}=await supabase.rpc('create_trip_with_days',{p_name:'熊野古道全踏破',p_summary:'五日中边路与大边路徒步计划；从泷尻王子出发，完成熊野三山巡礼。',p_days:seedDays,p_display_name:userName()}); if(error) throw error; tripId=data; localStorage.setItem(ACTIVE_KEY,tripId) }
+  await loadLive(tripId)
+}
+async function loadLive(tripId){
+  const [tripRes,dayRes,memberRes,activityRes]=await Promise.all([
+    supabase.from('trips').select('*').eq('id',tripId).single(),
+    supabase.from('trip_days').select('*').eq('trip_id',tripId).order('day_no'),
+    supabase.from('trip_members').select('*').eq('trip_id',tripId).order('joined_at'),
+    supabase.from('trip_activity').select('*').eq('trip_id',tripId).order('created_at',{ascending:false}).limit(10)
+  ])
+  if(tripRes.error) throw tripRes.error; if(dayRes.error) throw dayRes.error; if(memberRes.error) throw memberRes.error; if(activityRes.error) throw activityRes.error
+  normalize({trip:tripRes.data,days:dayRes.data,members:memberRes.data,activity:activityRes.data})
+}
+function subscribe(){
+  if(state.channel) supabase.removeChannel(state.channel)
+  let timer; const refresh=()=>{clearTimeout(timer);timer=setTimeout(async()=>{try{await loadLive(state.trip.id);render()}catch(error){console.warn(error)}},350)}
+  state.channel=supabase.channel(`kumano-${state.trip.id}`)
+    .on('postgres_changes',{event:'*',schema:'public',table:'trip_days',filter:`trip_id=eq.${state.trip.id}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'trip_members',filter:`trip_id=eq.${state.trip.id}`},refresh)
+    .on('postgres_changes',{event:'*',schema:'public',table:'trip_activity',filter:`trip_id=eq.${state.trip.id}`},refresh)
+    .subscribe()
+}
+
+function mapSvg(){ const active=state.selectedDay; return `<svg class="route-map" viewBox="0 0 760 300" role="img" aria-label="熊野古道五日路线示意图"><path class="water" d="M580 18 C730 18 750 86 750 151 C750 254 670 285 548 292 L530 240 C613 214 624 142 560 91 Z"/><path class="coast" d="M76 43 C149 14 244 34 291 79 C350 30 462 37 547 89 C627 137 627 210 550 244 C465 282 373 263 328 222 C264 275 152 253 105 196 C70 152 41 83 76 43Z"/><path class="route r1 ${active===1?'active':''}" d="M156 69 L238 95 L277 126"/><path class="route r2 ${active===2?'active':''}" d="M277 126 L321 157"/><path class="route r3 ${active===3?'active':''}" d="M321 157 L412 205"/><path class="route r4 ${active===4?'active':''}" d="M412 205 L489 178 L528 195"/><path class="route r5 ${active===5?'active':''}" d="M528 195 L505 136 L463 109 L436 152 L412 205 L98 63"/><text x="642" y="170" class="sea-label">太 平 洋</text>${[[1,156,69,'泷尻王子',165,62],[1,238,95,'高原',245,91],[1,277,126,'近露王子',284,121],[2,321,157,'发心门王子',328,151],[3,412,205,'熊野本宫大社',420,223],[4,489,178,'青岸渡寺',496,172],[4,528,195,'那智瀑布',535,211],[5,463,109,'速玉大社',469,103],[5,436,152,'神仓神社',442,146],[5,98,63,'大阪',52,58]].map(([d,x,y,t,tx,ty])=>`<g class="node ${d===active?'active':''}" data-day="${d}" tabindex="0"><circle cx="${x}" cy="${y}" r="6"/><text x="${tx}" y="${ty}">${t}</text></g>`).join('')}</svg>` }
+function render(){
+  const day=state.days.find(item=>item.dayNo===state.selectedDay) || state.days[0]
+  if(!day) return
+  const members=state.members.slice(0,5); const canEdit=['owner','editor'].includes(state.role)
+  app.innerHTML=`<main class="app-shell"><header class="topbar"><div class="brand"><span class="brand-mark">山</span><span>熊野同行计划</span></div><div class="top-actions"><span class="presence"><i></i>${isLive?'实时协作已连接':'本机预览模式'}</span><span class="mode ${isLive?'':'demo'}">${isLive?'LIVE':'DEMO'}</span><button class="ghost" data-action="rename">昵称：${esc(userName())}</button></div></header><section class="hero"><div class="hero-content"><div class="eyebrow">KUMANO KODO · SHARED JOURNEY</div><h1>${esc(state.trip.name)}</h1><p>${esc(state.trip.summary)}</p><div class="hero-figures"><div class="figure"><b>5 DAYS</b><small>连续行程日</small></div><div class="figure"><b>52–54 km</b><small>计划徒步里程</small></div><div class="figure"><b>熊野三山</b><small>本宫 · 速玉 · 那智</small></div></div></div></section><section class="grid-overview"><article class="card map-card"><div class="card-heading"><div><h2>路线概览</h2><p>点击地图或日期卡，查看每一日的路线与强度。</p></div><span class="mode">DAY ${day.dayNo}</span></div>${mapSvg()}</article><aside class="card collab-summary"><div class="summary-top"><h2>同行协作</h2><span class="mode ${state.role==='viewer'?'demo':''}">${roleText(state.role)}</span></div><div class="member-stack">${members.map(m=>`<span class="member-dot" title="${esc(m.display_name)}">${esc(shortName(m.display_name))}</span>`).join('')}</div><p class="summary-copy">${isLive?'此行程正向已加入的同行者同步。每次保存均会留下修改记录。':'这是可交互的本机预览。填入后端配置后，邀请链接与实时同步会自动启用。'}</p><div class="summary-stats"><div><b>${state.members.length}</b><span>已加入同行者</span></div><div><b>${state.activity.length}</b><span>最近动态</span></div></div><div class="collab-buttons"><button class="btn-secondary" data-action="members">成员与记录</button><button class="btn-primary" data-action="invite" ${canEdit?'':'disabled'}>${canEdit?'邀请朋友':'仅查看权限'}</button></div></aside></section><section class="agenda"><div class="section-heading"><div><h2>每日行程</h2><p>长按不需要；点击“编辑”即可共同维护路线、时间、节点与出发提醒。</p></div><span class="mode">已选 DAY ${day.dayNo}</span></div><div class="tabs">${state.days.map(d=>`<button class="day-tab ${d.dayNo===day.dayNo?'active':''}" data-day="${d.dayNo}"><small>DAY ${d.dayNo}</small><b>${esc(d.shortTitle)}</b><span>${esc(d.metrics.walk)} · ${esc(d.metrics.time)}</span></button>`).join('')}</div><article class="card day-card"><div class="day-top"><div><div class="day-kicker">DAY ${day.dayNo} · ${esc(day.tag)}</div><div class="day-title">${esc(day.route)}</div><p class="day-subtitle">${esc(day.subtitle)}</p></div><div class="day-actions"><button class="edit-btn" data-action="edit" ${canEdit?'':'disabled'}>${canEdit?'共同编辑':'仅查看'}</button></div></div><div class="metrics"><div class="metric"><small>徒步</small><b>${esc(day.metrics.walk)}</b></div><div class="metric"><small>预计时间</small><b>${esc(day.metrics.time)}</b></div><div class="metric"><small>累计升降</small><b>${esc(day.metrics.gain)}</b></div></div><div class="timeline">${day.stops.map(stop=>`<div class="stop ${esc(stop.type)}"><div class="stop-title">${esc(stop.icon)} ${esc(stop.title)}</div><p>${esc(stop.detail)}</p></div>`).join('')}</div><div class="day-note">◆ ${esc(day.note)}</div></article></section><section class="updates"><article class="card"><div class="card-heading"><div><h2>最近修改</h2><p>每次保存都保留可追溯记录。</p></div></div><ul class="activity-list">${state.activity.length?state.activity.map(item=>`<li class="activity"><div>${esc(item.text)}<small>${fmt(item.created_at)}</small></div></li>`).join(''):'<li class="activity">还没有修改记录</li>'}</ul></article><aside class="warning"><h3>行程提示</h3><p><b>Day 1 的原始资料分别记为 14 km 与 16 km。</b>本行程将其呈现为 14–16 km；请在出发前向领队确认最终路线口径。</p><p>Day 4 为全程最长、爬升最大的徒步日，建议提前确认天气、装备和出发时间。</p></aside></section><footer class="footer"><span>熊野古道全踏破 · 五日协作行程</span><span>${isLive?'邀请链接 7 天有效 · 保存时启用版本冲突保护':'预览数据仅保存在当前浏览器'}</span></footer></main>`
+}
+function openModal(html){ modalRoot.innerHTML=`<div class="modal-backdrop" data-close-modal><section class="modal" role="dialog" aria-modal="true">${html}</section></div>` }
+function closeModal(){modalRoot.innerHTML=''}
+function modalHead(title,copy){return `<div class="modal-head"><div><h2>${title}</h2><p>${copy}</p></div><button class="close" data-close-modal aria-label="关闭">×</button></div>`}
+function stopText(stops){return stops.map(s=>`${s.icon}|${s.type}|${s.title}|${s.detail}`).join('\n')}
+function parseStops(text){return text.split('\n').map(line=>line.trim()).filter(Boolean).map(line=>{const [icon='📍',type='walk',title='',...rest]=line.split('|').map(x=>x.trim());return {icon,type:['walk','transport','hotel'].includes(type)?type:'walk',title,detail:rest.join('|')}}).filter(s=>s.title)}
+function editDay(){ const d=state.days.find(item=>item.dayNo===state.selectedDay); if(!d||!['owner','editor'].includes(state.role))return; openModal(`${modalHead(`编辑 DAY ${d.dayNo}`, '保存时会检查版本；若他人已先保存，会提示刷新，避免覆盖对方修改。')}<form class="form" id="edit-form"><div class="field"><label>短标签</label><input name="shortTitle" value="${esc(d.shortTitle)}"></div><div class="field"><label>路线</label><textarea name="route">${esc(d.route)}</textarea></div><div class="field"><label>当日概览</label><textarea name="subtitle">${esc(d.subtitle)}</textarea></div><div class="metric-form"><div class="field"><label>徒步</label><input name="walk" value="${esc(d.metrics.walk)}"></div><div class="field"><label>预计时间</label><input name="time" value="${esc(d.metrics.time)}"></div><div class="field"><label>累计升降</label><input name="gain" value="${esc(d.metrics.gain)}"></div></div><div class="field"><label>行程节点</label><textarea name="stops" style="min-height:230px">${esc(stopText(d.stops))}</textarea><span class="help">每行一个节点：图标 | 类型（walk / transport / hotel）| 标题 | 说明</span></div><div class="field"><label>同行提醒</label><textarea name="note">${esc(d.note)}</textarea></div><div class="modal-actions"><button type="button" class="btn-secondary" data-close-modal>取消</button><button type="submit" class="btn-primary">保存并同步</button></div></form>`); document.querySelector('#edit-form').addEventListener('submit',saveDay) }
+async function saveDay(event){ event.preventDefault(); const old=state.days.find(item=>item.dayNo===state.selectedDay); const f=new FormData(event.currentTarget); const stops=parseStops(f.get('stops')); if(!f.get('route').trim()||!stops.length)return toastMsg('请至少填写路线和一个行程节点'); const content={...old,shortTitle:f.get('shortTitle').trim(),route:f.get('route').trim(),subtitle:f.get('subtitle').trim(),metrics:{walk:f.get('walk').trim(),time:f.get('time').trim(),gain:f.get('gain').trim()},stops,note:f.get('note').trim()}; try{ if(isLive){const {error}=await supabase.rpc('update_trip_day',{p_trip_id:state.trip.id,p_day_id:old._id,p_content:content,p_expected_revision:old.revision}); if(error){if(error.message.includes('CONFLICT'))throw new Error('有同行者刚刚保存了新的内容，请关闭窗口后刷新再编辑。');throw error}await loadLive(state.trip.id)}else{const row=state.demo.days.find(d=>d.id===old._id); row.content=content;row.revision+=1;row.updated_at=new Date().toISOString();state.demo.activity.unshift({id:`demo-${Date.now()}`,trip_id:state.trip.id,text:`${userName()} 更新了 DAY ${old.dayNo}「${content.title}」`,created_at:row.updated_at});persistDemo();normalize(state.demo)} closeModal();render();toastMsg(isLive?'已同步给同行者':'已保存到本机预览') }catch(error){toastMsg(error.message||'保存失败')} }
+function invite(){ if(!['owner','editor'].includes(state.role))return; openModal(`${modalHead('邀请朋友协作', isLive?'生成链接后，把它发送给同行者；邀请 7 天内有效。':'本机预览模式中可体验弹窗，配置后端后将生成真实的协作链接。')}<div class="form"><div class="field"><label>朋友加入后的权限</label><select id="invite-role"><option value="editor">可编辑：可修改行程</option><option value="viewer">仅查看：可浏览全部内容</option></select></div><div class="modal-actions"><button class="btn-secondary" data-close-modal>取消</button><button class="btn-primary" data-action="create-invite">生成邀请链接</button></div><div id="invite-result"></div></div>`) }
+async function createInvite(){ const role=document.querySelector('#invite-role').value; try{let link; if(isLive){const {data,error}=await supabase.rpc('create_trip_invite',{p_trip_id:state.trip.id,p_role:role});if(error)throw error;const invite=Array.isArray(data)?data[0]:data;link=`${location.origin}${location.pathname}?trip=${state.trip.id}&invite=${invite.code}`}else link=`${location.href.split('?')[0]}?trip=demo-preview&invite=local-preview`; document.querySelector('#invite-result').innerHTML=`<div class="field"><label>${isLive?'邀请链接已生成':'预览链接（部署并配置后端后可跨设备协作）'}</label><div class="copy-row"><input id="invite-link" readonly value="${esc(link)}"><button class="btn-primary" data-action="copy-invite">复制</button></div></div>`; if(isLive){await loadLive(state.trip.id);render()} }catch(error){toastMsg(error.message||'无法生成邀请')} }
+async function copyInvite(){const field=document.querySelector('#invite-link');try{await navigator.clipboard.writeText(field.value)}catch{field.select();document.execCommand('copy')}toastMsg('邀请链接已复制')}
+function membersModal(){openModal(`${modalHead('同行者与修改记录', state.role==='owner'?'点击成员权限，可在“可编辑”和“仅查看”间切换。':'权限由组织者管理。')}<div class="member-list">${state.members.map(m=>`<div class="member-row"><span class="avatar">${esc(shortName(m.display_name))}</span><div class="member-main"><b>${esc(m.display_name)}</b><small>${fmt(m.joined_at)} 加入</small></div>${m.role==='owner'?'<span class="role owner">组织者</span>':state.role==='owner'?`<button class="role ${m.role}" data-action="role" data-id="${m.id}" data-role="${m.role}">${roleText(m.role)} ↕</button>`:`<span class="role ${m.role}">${roleText(m.role)}</span>`}</div>`).join('')}</div><div class="field"><label>最新动态</label><div class="activity-list">${state.activity.slice(0,5).map(a=>`<div class="activity"><div>${esc(a.text)}<small>${fmt(a.created_at)}</small></div></div>`).join('')}</div></div>`)}
+async function changeRole(button){const m=state.members.find(item=>item.id===button.dataset.id);if(!m)return;const role=m.role==='editor'?'viewer':'editor';try{if(isLive){const {error}=await supabase.rpc('set_trip_member_role',{p_trip_id:state.trip.id,p_member_id:m.id,p_role:role});if(error)throw error;await loadLive(state.trip.id)}else{m.role=role;state.demo.activity.unshift({id:`demo-${Date.now()}`,trip_id:state.trip.id,text:`组织者将 ${m.display_name} 设为${roleText(role)}`,created_at:new Date().toISOString()});persistDemo();normalize(state.demo)}membersModal();render();toastMsg(`已设为${roleText(role)}`)}catch(error){toastMsg(error.message||'权限更新失败')}}
+document.addEventListener('click',event=>{const close=event.target.closest('[data-close-modal]');if(close){closeModal();return}const node=event.target.closest('[data-day]');if(node){state.selectedDay=Number(node.dataset.day);render();return}const action=event.target.closest('[data-action]')?.dataset.action;if(!action)return;if(action==='rename'){setUserName();render()}if(action==='edit')editDay();if(action==='invite')invite();if(action==='create-invite')createInvite();if(action==='copy-invite')copyInvite();if(action==='members')membersModal();if(action==='role')changeRole(event.target.closest('[data-action="role"]'))})
+start()
