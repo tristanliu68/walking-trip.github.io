@@ -4,15 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#193c33" />
-  <meta name="description" content="可邀请朋友共同编辑的熊野古道五日行程" />
-  <title>熊野同行计划｜共同编辑</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta name="description" content="熊野同行计划的协作区已整合至主页面" />
+  <title>正在打开同行协作…</title>
 </head>
 <body>
-  <div id="app"><div class="loading-screen"><span class="loader"></span><span>正在打开同行计划…</span></div></div>
-  <div id="modal-root"></div>
-  <div id="toast" role="status" aria-live="polite"></div>
-  <script src="config.js"></script>
-  <script type="module" src="app.js"></script>
+  <p>正在返回主页面的同行协作区… <a id="main-link" href="./index.html#together">继续前往</a></p>
+  <script>
+    (function () {
+      var target = './index.html' + window.location.search + '#together';
+      document.getElementById('main-link').href = target;
+      window.location.replace(target);
+    }());
+  </script>
 </body>
 </html>
