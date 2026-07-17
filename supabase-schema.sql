@@ -102,7 +102,9 @@ begin
   v_role := public.trip_role(p_trip_id);
   if v_role not in ('owner','editor') then raise exception '无邀请权限'; end if;
   if p_role not in ('editor','viewer') then raise exception '无效成员权限'; end if;
-  v_code := encode(gen_random_bytes(8), 'hex');
+  -- 使用 PostgreSQL 内置随机 UUID 生成邀请码，避免 security definer
+  -- 函数的 search_path 限制导致无法解析 pgcrypto 的 gen_random_bytes。
+  v_code := replace(pg_catalog.gen_random_uuid()::text, '-', '') || replace(pg_catalog.gen_random_uuid()::text, '-', '');
   insert into public.trip_invites(trip_id, code, role, created_by, expires_at) values (p_trip_id, v_code, p_role, auth.uid(), v_expiry);
   perform public.add_activity(p_trip_id, '生成了一条可分享的邀请链接');
   return query select v_code, v_expiry;
